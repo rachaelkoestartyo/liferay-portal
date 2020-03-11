@@ -85,16 +85,18 @@ public class AnalyticsConfigurationTrackerImpl
 
 	@Override
 	public void deleted(String pid) {
-		_unmapPid(pid);
+		Thread thread = new Thread(() -> {
+			long companyId = getCompanyId(pid);
 
-		long companyId = getCompanyId(pid);
+			_unmapPid(pid);
 
-		if (companyId == CompanyConstants.SYSTEM) {
-			return;
-		}
+			_disable(companyId);
+		});
 
-		_disable(companyId);
-	}
+		thread.setDaemon(true);
+
+		thread.start();
+	};
 
 	@Override
 	public AnalyticsConfiguration getAnalyticsConfiguration(long companyId) {
@@ -115,7 +117,8 @@ public class AnalyticsConfigurationTrackerImpl
 
 	@Override
 	public Dictionary<String, Object> getAnalyticsConfigurationProperties(
-		long companyId) {
+			long companyId)
+		throws Exception {
 
 		Set<Map.Entry<String, Long>> entries = _pidCompanyIdMapping.entrySet();
 
@@ -130,20 +133,10 @@ public class AnalyticsConfigurationTrackerImpl
 			null
 		);
 
-		try {
-			Configuration configuration = _configurationAdmin.getConfiguration(
-				pid, StringPool.QUESTION);
+		Configuration configuration = _configurationAdmin.getConfiguration(
+			pid, StringPool.QUESTION);
 
-			return configuration.getProperties();
-		}
-		catch (Exception exception) {
-			if (_log.isInfoEnabled()) {
-				_log.info(
-					"Unable to get configuration for company " + companyId);
-			}
-
-			return null;
-		}
+		return configuration.getProperties();
 	}
 
 	@Override
@@ -164,40 +157,46 @@ public class AnalyticsConfigurationTrackerImpl
 
 	@Override
 	public void updated(String pid, Dictionary<String, ?> dictionary) {
-		_unmapPid(pid);
+		Thread thread = new Thread(() -> {
+			_unmapPid(pid);
 
-		long companyId = GetterUtil.getLong(
-			dictionary.get("companyId"), CompanyConstants.SYSTEM);
+			long companyId = GetterUtil.getLong(
+				dictionary.get("companyId"), CompanyConstants.SYSTEM);
 
-		if (companyId != CompanyConstants.SYSTEM) {
-			_pidCompanyIdMapping.put(pid, companyId);
+			if (companyId != CompanyConstants.SYSTEM) {
+				_pidCompanyIdMapping.put(pid, companyId);
 
-			_analyticsConfigurations.put(
-				companyId,
-				ConfigurableUtil.createConfigurable(
-					AnalyticsConfiguration.class, dictionary));
-		}
-
-		if (!_initializedCompanyIds.contains(companyId)) {
-			_initializedCompanyIds.add(companyId);
-
-			if (Validator.isNotNull(dictionary.get("previousToken"))) {
-				return;
-			}
-		}
-
-		if (Validator.isNull(dictionary.get("token"))) {
-			if (Validator.isNotNull(dictionary.get("previousToken"))) {
-				_disable((Long)dictionary.get("companyId"));
-			}
-		}
-		else {
-			if (Validator.isNull(dictionary.get("previousToken"))) {
-				_enable((Long)dictionary.get("companyId"));
+				_analyticsConfigurations.put(
+					companyId,
+					ConfigurableUtil.createConfigurable(
+						AnalyticsConfiguration.class, dictionary));
 			}
 
-			_sync(dictionary);
-		}
+			if (!_initializedCompanyIds.contains(companyId)) {
+				_initializedCompanyIds.add(companyId);
+
+				if (Validator.isNotNull(dictionary.get("previousToken"))) {
+					return;
+				}
+			}
+
+			if (Validator.isNull(dictionary.get("token"))) {
+				if (Validator.isNotNull(dictionary.get("previousToken"))) {
+					_disable((Long)dictionary.get("companyId"));
+				}
+			}
+			else {
+				if (Validator.isNull(dictionary.get("previousToken"))) {
+					_enable((Long)dictionary.get("companyId"));
+				}
+
+				_sync(dictionary);
+			}
+		});
+
+		thread.setDaemon(true);
+
+		thread.start();
 	}
 
 	@Activate
@@ -346,11 +345,16 @@ public class AnalyticsConfigurationTrackerImpl
 
 	private void _disable(long companyId) {
 		try {
-			_analyticsMessageLocalService.deleteAnalyticsMessages(companyId);
+			if (companyId != CompanyConstants.SYSTEM) {
+				_analyticsMessageLocalService.deleteAnalyticsMessages(
+					companyId);
 
-			_deleteAnalyticsAdmin(companyId);
-			_deleteSAPEntry(companyId);
+				_deleteAnalyticsAdmin(companyId);
+				_deleteSAPEntry(companyId);
+			}
+
 			_disableAuthVerifier();
+			_disableEntityModelListeners();
 		}
 		catch (Exception exception) {
 			_log.error(exception, exception);
@@ -366,11 +370,28 @@ public class AnalyticsConfigurationTrackerImpl
 		}
 	}
 
+	private void _disableEntityModelListeners() throws Exception {
+		if (!_hasConfiguration() && _entityModelListenersEnabled) {
+			if (_log.isInfoEnabled()) {
+				_log.info("Disabling entity model listeners");
+			}
+
+			_entityModelListenerRegistry.disableEntityModelListeners();
+
+			if (_log.isInfoEnabled()) {
+				_log.info("Entity model listeners disabled successfully");
+			}
+
+			_entityModelListenersEnabled = false;
+		}
+	}
+
 	private void _enable(long companyId) {
 		try {
 			_addAnalyticsAdmin(companyId);
 			_addSAPEntry(companyId);
 			_enableAuthVerifier();
+			_enableEntityModelListeners();
 		}
 		catch (Exception exception) {
 			_log.error(exception, exception);
@@ -383,6 +404,22 @@ public class AnalyticsConfigurationTrackerImpl
 				AnalyticsSecurityAuthVerifier.class.getName());
 
 			_authVerifierEnabled = true;
+		}
+	}
+
+	private void _enableEntityModelListeners() {
+		if (!_entityModelListenersEnabled) {
+			if (_log.isInfoEnabled()) {
+				_log.info("Enabling entity model listeners");
+			}
+
+			_entityModelListenerRegistry.enableEntityModelListeners();
+
+			if (_log.isInfoEnabled()) {
+				_log.info("Entity model listeners enabled successfully");
+			}
+
+			_entityModelListenersEnabled = true;
 		}
 	}
 
@@ -580,6 +617,7 @@ public class AnalyticsConfigurationTrackerImpl
 	@Reference
 	private EntityModelListenerRegistry _entityModelListenerRegistry;
 
+	private boolean _entityModelListenersEnabled;
 	private final Set<Long> _initializedCompanyIds = new HashSet<>();
 
 	@Reference

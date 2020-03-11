@@ -35,7 +35,7 @@ import org.osgi.service.component.annotations.Reference;
  * @author Rachael Koestartyo
  */
 @Component(
-	immediate = true, service = {EntityModelListener.class, ModelListener.class}
+	enabled = false, service = {EntityModelListener.class, ModelListener.class}
 )
 public class ExpandoRowModelListener
 	extends BaseEntityModelListener<ExpandoRow> {
@@ -66,7 +66,7 @@ public class ExpandoRowModelListener
 		if (isCustomField(User.class.getName(), expandoRow.getTableId())) {
 			User user = userLocalService.fetchUser(expandoRow.getClassPK());
 
-			return super.isUserExcluded(user);
+			return isUserExcluded(user);
 		}
 
 		return true;
@@ -87,7 +87,8 @@ public class ExpandoRowModelListener
 
 			if (organization != null) {
 				JSONObject jsonObject = super.serialize(
-					organization, getOrganizationAttributeNames());
+					organization,
+					_organizationModelListener.getAttributeNames());
 
 				jsonObject.remove(getPrimaryKeyName());
 
@@ -100,7 +101,7 @@ public class ExpandoRowModelListener
 
 			if (user != null) {
 				JSONObject jsonObject = super.serialize(
-					user, getUserAttributeNames());
+					user, _contactModelListener.getAttributeNames());
 
 				jsonObject.remove(getPrimaryKeyName());
 
@@ -112,9 +113,15 @@ public class ExpandoRowModelListener
 	}
 
 	@Reference
+	private ContactModelListener _contactModelListener;
+
+	@Reference
 	private ExpandoRowLocalService _expandoRowLocalService;
 
 	@Reference
 	private OrganizationLocalService _organizationLocalService;
+
+	@Reference
+	private OrganizationModelListener _organizationModelListener;
 
 }
