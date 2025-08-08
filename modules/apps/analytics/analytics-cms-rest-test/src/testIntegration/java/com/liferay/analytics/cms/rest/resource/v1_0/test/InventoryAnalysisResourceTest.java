@@ -62,7 +62,7 @@ import org.osgi.framework.FrameworkUtil;
 	featureFlags = {
 		@FeatureFlag(value = "LPD-31149"), @FeatureFlag(value = "LPD-34594"),
 		@FeatureFlag(value = "LPS-179669"), @FeatureFlag(value = "LPD-17564"),
-		@FeatureFlag(value = "LPD-21926"), @FeatureFlag(value = "LPS-179669")
+		@FeatureFlag("LPD-21926")
 	}
 )
 @RunWith(Arquillian.class)
