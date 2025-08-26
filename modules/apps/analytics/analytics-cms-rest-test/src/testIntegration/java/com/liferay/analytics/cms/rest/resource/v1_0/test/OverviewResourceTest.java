@@ -26,10 +26,13 @@ import com.liferay.document.library.kernel.model.DLFileEntryTypeConstants;
 import com.liferay.document.library.kernel.model.DLFolder;
 import com.liferay.document.library.kernel.service.DLFileEntryLocalService;
 import com.liferay.document.library.test.util.DLTestUtil;
+import com.liferay.object.constants.ObjectDefinitionConstants;
+import com.liferay.object.constants.ObjectDefinitionSettingConstants;
 import com.liferay.object.model.ObjectDefinition;
 import com.liferay.object.model.ObjectEntry;
 import com.liferay.object.rest.test.util.ObjectEntryTestUtil;
 import com.liferay.object.service.ObjectDefinitionLocalService;
+import com.liferay.object.service.ObjectDefinitionSettingLocalService;
 import com.liferay.petra.string.StringPool;
 import com.liferay.portal.kernel.service.ServiceContext;
 import com.liferay.portal.kernel.test.constants.TestDataConstants;
@@ -68,7 +71,7 @@ import org.osgi.framework.FrameworkUtil;
 	featureFlags = {
 		@FeatureFlag(value = "LPD-31149"), @FeatureFlag(value = "LPD-34594"),
 		@FeatureFlag(value = "LPS-179669"), @FeatureFlag(value = "LPD-17564"),
-		@FeatureFlag(value = "LPD-21926"), @FeatureFlag(value = "LPS-179669")
+		@FeatureFlag("LPD-21926")
 	}
 )
 @RunWith(Arquillian.class)
@@ -117,8 +120,21 @@ public class OverviewResourceTest extends BaseOverviewResourceTestCase {
 	public void testGetContentOverview() throws Exception {
 		ObjectDefinition objectDefinition =
 			_objectDefinitionLocalService.
-				getObjectDefinitionByExternalReferenceCode(
+				fetchObjectDefinitionByExternalReferenceCode(
 					"L_BASIC_WEB_CONTENT", testCompany.getCompanyId());
+
+		if (objectDefinition == null) {
+			objectDefinition =
+				_objectDefinitionLocalService.addObjectDefinition(
+					"L_BASIC_WEB_CONTENT", TestPropsValues.getUserId(), 0,
+					true, ObjectDefinitionConstants.SCOPE_DEPOT, true);
+
+			_objectDefinitionSettingLocalService.addObjectDefinitionSetting(
+				objectDefinition.getUserId(),
+				objectDefinition.getObjectDefinitionId(),
+				ObjectDefinitionSettingConstants.NAME_ACCEPTED_GROUP_IDS,
+				String.valueOf(_depotEntry.getGroupId()));
+		}
 
 		_objectEntry = ObjectEntryTestUtil.addObjectEntry(
 			_depotEntry.getGroupId(), objectDefinition, Collections.emptyMap());
@@ -207,8 +223,21 @@ public class OverviewResourceTest extends BaseOverviewResourceTestCase {
 
 		ObjectDefinition objectDefinition =
 			_objectDefinitionLocalService.
-				getObjectDefinitionByExternalReferenceCode(
+				fetchObjectDefinitionByExternalReferenceCode(
 					"L_BASIC_DOCUMENT", testCompany.getCompanyId());
+
+		if (objectDefinition == null) {
+			objectDefinition =
+				_objectDefinitionLocalService.addObjectDefinition(
+					"L_BASIC_DOCUMENT", TestPropsValues.getUserId(), 0,
+					true, ObjectDefinitionConstants.SCOPE_DEPOT, true);
+
+			_objectDefinitionSettingLocalService.addObjectDefinitionSetting(
+				objectDefinition.getUserId(),
+				objectDefinition.getObjectDefinitionId(),
+				ObjectDefinitionSettingConstants.NAME_ACCEPTED_GROUP_IDS,
+				String.valueOf(_depotEntry.getGroupId()));
+		}
 
 		_objectEntry = ObjectEntryTestUtil.addObjectEntry(
 			_depotEntry.getGroupId(), objectDefinition,
@@ -286,6 +315,10 @@ public class OverviewResourceTest extends BaseOverviewResourceTestCase {
 
 	@Inject
 	private ObjectDefinitionLocalService _objectDefinitionLocalService;
+
+	@Inject
+	private ObjectDefinitionSettingLocalService
+		_objectDefinitionSettingLocalService;
 
 	@DeleteAfterTestRun
 	private ObjectEntry _objectEntry;
